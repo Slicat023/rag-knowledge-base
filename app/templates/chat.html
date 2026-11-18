@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}知识问答 · {{ app_name }}{% endblock %}
+{% block eyebrow %}Ask your documents{% endblock %}
+{% block page_title %}知识问答{% endblock %}
+
+{% block topbar_actions %}
+  <div class="model-switch" id="model-switch" role="group" aria-label="选择模型">
+    {% for key, info in providers.items() %}
+      <button
+        class="model-pill {% if key == default_llm %}active{% endif %}"
+        type="button"
+        data-provider="{{ key }}"
+        title="{{ info.label }} · {{ info.model }}{% if not info.configured %}（未配置 API Key）{% endif %}"
+        {% if not info.configured %}disabled{% endif %}>
+        <span class="model-dot"></span>
+        <span>{{ info.label }}</span>
+        {% if not info.configured %}<span class="pill-tag">未配置</span>{% endif %}
+      </button>
+    {% endfor %}
+  </div>
+  <button class="ghost-btn" id="clear-chat" type="button" title="清空当前对话">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg>
+    <span>清空</span>
+  </button>
+{% endblock %}
+
+{% block content %}
+<section class="chat-layout">
+  <div class="chat-scroll" id="chat-scroll">
+    <div class="chat-thread" id="chat-thread">
+      <section class="chat-hero" id="chat-hero">
+        <div class="hero-badge"><span></span>RETRIEVAL AUGMENTED GENERATION</div>
+        <h2>问点什么，<br><em>从文档里找答案。</em></h2>
+        <p class="hero-copy">
+          知识库会先检索相关段落，再用 BGE 重排序，最后交给大模型组织答案。
+          每个结论都附带可追溯的文件与页码。
+        </p>
+        <div class="hero-points">
+          <div class="hero-point"><strong>01</strong><span>本地向量化</span><small>BGE 中文模型</small></div>
+          <div class="hero-point"><strong>02</strong><span>混合检索</span><small>Chroma + Reranker</small></div>
+          <div class="hero-point"><strong>03</strong><span>可溯源</span><small>文件 / 页码引用</small></div>
+        </div>
+
+        {% if configured_count == 0 %}
+        <div class="notice notice-warn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <div>
+            <strong>还没有配置模型 API Key</strong>
+            <p>复制 <code>.env.example</code> 为 <code>.env</code>，填写 <code>QWEN_API_KEY</code> 或 <code>DEEPSEEK_API_KEY</code>，重启服务即可开始问答。</p>
+          </div>
+        </div>
+        {% else %}
+        <div class="suggestions" id="suggestions">
+          <button type="button" data-question="这个知识库主要讲了什么？请概括核心主题。">
+            <span class="suggestion-index">A</span>
+            <span>这个知识库主要讲了什么？</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+          <button type="button" data-question="请总结知识库中最重要的流程或步骤，并标注来源。">
+            <span class="suggestion-index">B</span>
+            <span>总结最重要的流程或步骤</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+          <button type="button" data-question="知识库中提到了哪些关键参数、限制或注意事项？">
+            <span class="suggestion-index">C</span>
+            <span>有哪些关键参数和注意事项？</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+        {% endif %}
+
+        <div class="kb-empty-tip" id="kb-empty-tip" hidden>
+          知识库还没有可用文件。
+          <a href="/knowledge">去添加第一份文档 →</a>
+        </div>
+      </section>
+
+      <div class="messages" id="messages"></div>
+    </div>
+  </div>
+
+  <div class="composer-wrap">
+    <form class="composer" id="chat-form" autocomplete="off">
+      <textarea
+        id="chat-input"
+        rows="1"
+        maxlength="4000"
+        placeholder="输入问题，Enter 发送，Shift + Enter 换行"></textarea>
+      <div class="composer-actions">
+        <span class="composer-model" id="composer-model">通义千问</span>
+        <button class="send-btn" id="send-btn" type="submit" aria-label="发送问题">
+          <svg class="send-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </button>
+      </div>
+    </form>
+    <div class="composer-meta">
+      <span>答案由知识库内容生成，请核对引用来源</span>
+      <span id="char-count">0 / 4000</span>
+    </div>
+  </div>
+</section>
+
+<dialog class="dialog source-dialog" id="source-dialog">
+  <div class="dialog-head">
+    <div>
+      <span class="eyebrow">引用来源</span>
+      <h3>答案依据的原文片段</h3>
+    </div>
+    <button class="icon-btn" type="button" data-close-dialog aria-label="关闭">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="dialog-body source-dialog-body" id="source-dialog-body"></div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/chat.js"></script>
+{% endblock %}

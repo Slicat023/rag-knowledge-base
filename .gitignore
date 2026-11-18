@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.venv2/
+.venvtest/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tmp/
+get-pip.py
+
+# Secrets
+.env
+
+# Runtime data (including all chroma/registry backups)
+data/chroma*/
+data/documents/
+data/cache/
+data/tmp/
+data/registry*.json
+data/registry.json.tmp
+tests/.data/
+
+# Downloaded models
+models/
+
+# PyTorch/Inductor caches
+torchinductor_*/
+torch_compile_debug/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
